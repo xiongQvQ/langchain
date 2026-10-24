@@ -220,3 +220,45 @@ async def test_inmemory_call_embeddings_async() -> None:
     # Ensure the async embedding function is called
     assert embeddings_mock.aembed_documents.await_count == 1
     assert embeddings_mock.aembed_query.await_count == 1
+
+
+@pytest.mark.parametrize("k", [-1, -5])
+def test_negative_k_raises(k: int) -> None:
+    """Negative k should raise instead of returning arbitrary documents."""
+    embedding = DeterministicFakeEmbedding(size=3)
+    store = InMemoryVectorStore.from_texts(["foo", "bar", "baz"], embedding)
+    vector = embedding.embed_query("foo")
+
+    with pytest.raises(ValueError, match="k must be a non-negative integer"):
+        store.similarity_search("foo", k=k)
+    with pytest.raises(ValueError, match="k must be a non-negative integer"):
+        store.similarity_search_with_score("foo", k=k)
+    with pytest.raises(ValueError, match="k must be a non-negative integer"):
+        store.similarity_search_by_vector(vector, k=k)
+    with pytest.raises(ValueError, match="k must be a non-negative integer"):
+        store.max_marginal_relevance_search("foo", k=k)
+    with pytest.raises(ValueError, match="k must be a non-negative integer"):
+        store.max_marginal_relevance_search("foo", k=1, fetch_k=k)
+
+
+@pytest.mark.asyncio
+async def test_negative_k_raises_async() -> None:
+    """The async search methods reject negative k too."""
+    embedding = DeterministicFakeEmbedding(size=3)
+    store = await InMemoryVectorStore.afrom_texts(["foo", "bar", "baz"], embedding)
+    vector = embedding.embed_query("foo")
+
+    with pytest.raises(ValueError, match="k must be a non-negative integer"):
+        await store.asimilarity_search("foo", k=-1)
+    with pytest.raises(ValueError, match="k must be a non-negative integer"):
+        await store.asimilarity_search_by_vector(vector, k=-1)
+    with pytest.raises(ValueError, match="k must be a non-negative integer"):
+        await store.amax_marginal_relevance_search("foo", k=-1)
+
+
+def test_zero_k_returns_empty() -> None:
+    """k=0 remains valid and returns no documents."""
+    store = InMemoryVectorStore.from_texts(
+        ["foo", "bar"], DeterministicFakeEmbedding(size=3)
+    )
+    assert store.similarity_search("foo", k=0) == []
